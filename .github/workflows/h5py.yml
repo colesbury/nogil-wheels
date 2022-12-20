@@ -1,0 +1,56 @@
+name: h5py
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 3.7.0
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: x86_64 arm64
+  CIBW_ARCHS_WINDOWS: AMD64
+  HDF5_CACHE_DIR: ${{ github.workspace }}/hdf5
+  HDF5_VERSION: 1.12.2
+  CIBW_ENVIRONMENT_MACOS: >
+    LD_LIBRARY_PATH="$(HDF5_CACHE_DIR)/$(HDF5_VERSION)/lib:${LD_LIBRARY_PATH}"
+    PKG_CONFIG_PATH="$(HDF5_CACHE_DIR)/$(HDF5_VERSION)/lib/pkgconfig:${PKG_CONFIG_PATH}"
+  CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
+    DYLD_FALLBACK_LIBRARY_PATH=$(HDF5_CACHE_DIR)/$(HDF5_VERSION)/lib delocate-listdeps {wheel} &&
+    DYLD_FALLBACK_LIBRARY_PATH=$(HDF5_CACHE_DIR)/$(HDF5_VERSION)/lib delocate-wheel --require-archs {delocate_archs} -w {dest_dir} {wheel}
+
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-12]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'h5py/h5py'
+          ref: ${{ env.VERSION }}
+
+      - name: ensure HDF5
+        if: runner.os == 'macOS'
+        run: ./ci/get_hdf5_if_needed.sh
+
+      - name: ensure HDF5
+        if: runner.os == 'Windows'
+        run:  >
+          py -3.7 -m pip install requests
+          py -3.7 ci\\get_hdf5_win.py
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

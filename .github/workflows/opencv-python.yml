@@ -1,0 +1,40 @@
+# See https://github.com/opencv/opencv-python/blob/4.x/.github/workflows/build_wheels_linux.yml
+
+name: opencv-python
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 4.6.0.66
+  GIT_TAG: 66
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: x86_64 arm64
+  CIBW_ARCHS_WINDOWS: AMD64
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-12]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'opencv/opencv-python'
+          ref: ${{ env.GIT_TAG }}
+          recursive: true
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

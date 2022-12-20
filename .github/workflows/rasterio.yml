@@ -1,0 +1,39 @@
+# See https://github.com/rasterio/rasterio-wheels/blob/main/.github/workflows/wheels.yaml
+# and https://github.com/rasterio/rasterio-wheels/blob/main/.github/workflows/win-wheels.yaml
+
+name: rasterio
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 1.3.2
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: universal2
+  CIBW_ARCHS_WINDOWS: AMD64
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-12]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'rasterio/rasterio'
+          ref: ${{ env.VERSION }}
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

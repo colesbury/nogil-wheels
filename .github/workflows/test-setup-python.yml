@@ -1,0 +1,31 @@
+name: test-setup-python
+
+on: [workflow_dispatch]
+
+jobs:
+  setup_python:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-2019, macos-12]
+
+    steps:
+      - uses: colesbury/setup-python@nogil
+        with:
+          python-version: 'nogil-3.9'
+
+      - shell: bash
+        run: |
+          which python
+          which pip
+          which python3
+          which pip3
+          pip list
+          python --version
+          python -c "import sys; print(sys.flags.nogil);"
+          pip install numpy
+
+      - run: |
+          python --version
+          python3 --version
+          python -c "import sys; print(sys.flags.nogil);"

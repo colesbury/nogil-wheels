@@ -1,0 +1,64 @@
+# LICENSES/LICENSE.scipy.txt
+# See https://github.com/scipy/scipy/blob/main/.github/workflows/wheels.yml
+# Modified for use with nogil Python
+
+name: scipy-upstream
+
+on:
+  workflow_dispatch:
+    inputs:
+      numpyversion:
+        type: string
+        default: 1.24.1
+
+env:
+  VERSION: 1.9.3
+  # FIXME: crashing tests
+  CIBW_TEST_SKIP: "*"
+
+jobs:
+  build_wheels:
+    name: Build wheel for ${{ matrix.buildplat[1] }} ${{ matrix.buildplat[2] }}
+    runs-on: ${{ matrix.buildplat[0] }}
+    strategy:
+      fail-fast: false
+      matrix:
+        buildplat:
+        - [windows-2019, win, AMD64]
+    env:
+      IS_32_BIT: ${{ matrix.buildplat[2] == 'x86' }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'colesbury/scipy'
+          ref: v1.9.3-test
+          submodules: true
+          # needed for scipy/tools/version_utils.py
+          fetch-depth: 0
+
+      - shell: bash
+        run: sed -i 's/1.24.1/${{ inputs.numpyversion }}/g' pyproject.toml
+
+      - name: Fix tags
+        run: git tag -f v${{ env.VERSION }}
+
+      - name: win_amd64 - install rtools
+        run: |
+          # mingw-w64
+          choco install rtools --no-progress
+          echo "c:\rtools40\ucrt64\bin;" >> $env:GITHUB_PATH
+        if: ${{ runner.os == 'Windows' && env.IS_32_BIT == 'false' }}
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.11.3
+        if: >-
+          ( ! contains(matrix.buildplat[2], 'arm64' ) )
+        env:
+          CIBW_BUILD: cp39-${{ matrix.buildplat[1] }}*
+          CIBW_ARCHS: ${{ matrix.buildplat[2] }}
+          CIBW_ENVIRONMENT_PASS_LINUX: RUNNER_OS
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl

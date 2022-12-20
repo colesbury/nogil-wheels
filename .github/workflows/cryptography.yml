@@ -1,0 +1,69 @@
+# See https://github.com/pyca/cryptography/blob/main/.github/workflows/wheel-builder.yml
+
+name: cryptography
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 36.0.2
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: x86_64 arm64
+  CIBW_ARCHS_WINDOWS: AMD64
+  CIBW_BEFORE_BUILD: pip install wheel cffi setuptools-rust
+  CIBW_BEFORE_ALL_LINUX: |
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    OPENSSL_VERSION="1.1.1k"
+    curl -O https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz
+    tar xvf openssl-${OPENSSL_VERSION}.tar.gz
+    cd openssl-${OPENSSL_VERSION}
+    ./config no-shared no-ssl2 no-ssl3 -fPIC --prefix=/openssl
+    make -j && make install
+  CIBW_ENVIRONMENT_LINUX: >
+    PATH=$HOME/.cargo/bin:$PATH
+    CFLAGS="-I/openssl/include"
+    LDFLAGS="-L/openssl/lib"
+  CIBW_BEFORE_ALL_WINDOWS: |
+    python -m pip install requests
+    python .github/workflows/download_openssl.py windows openssl-win64
+    echo "INCLUDE=C:/openssl-win64/include;$INCLUDE" >> $GITHUB_ENV
+    echo "LIB=C:/openssl-win64/lib;$LIB" >> $GITHUB_ENV
+  CIBW_ENVIRONMENT_WINDOWS: >
+    INCLUDE="C:/openssl-win64/include;$INCLUDE"
+    LIB="C:/openssl-win64/lib;$LIB"
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        #os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'colesbury/cryptography'
+          ref: ${{ env.VERSION }}-nogil
+
+      - uses: dtolnay/rust-toolchain@e645b0cf01249a964ec099494d38d2da0f0b349f
+        if: runner.os == "Windows"
+        with:
+          toolchain: stable
+          target: x86_64-pc-windows-msvc
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    with:
+      AWS_BUCKET: pypi-test.sam-gross.com
+    secrets: inherit

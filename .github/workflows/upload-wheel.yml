@@ -1,0 +1,35 @@
+on:
+  workflow_call:
+    inputs:
+      package:
+        type: string
+        default: ${{ github.workflow }}
+      AWS_BUCKET:
+        type: string
+        default: pypi.sam-gross.com
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AWS_DISTRIBUTION_ID:
+        required: true
+
+jobs:
+  upload_wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: artifact
+          path: dist
+
+      - uses: colesbury/upload-wheel-action@main
+        with:
+          package: ${{ inputs.package }}
+          aws_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_bucket: ${{ inputs.AWS_BUCKET }}
+          aws_distribution_id: ${{ secrets.AWS_DISTRIBUTION_ID }}
+          aws_region: 'us-east-1'
+          source_dir: 'dist'

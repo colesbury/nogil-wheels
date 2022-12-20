@@ -1,0 +1,257 @@
+# See the following build scripts:
+# https://github.com/python-pillow/Pillow/blob/main/.github/workflows/test-windows.yml
+# https://github.com/python-pillow/pillow-wheels/blob/main/config.sh
+
+name: Pillow
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 9.3.0
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: x86_64
+  CIBW_BEFORE_ALL_LINUX: "yum install -y zlib libjpeg-devel libtiff-devel freetype-devel lcms2-devel libwebp-devel harfbuzz-devel ghostscript libffi-devel ImageMagick fribidi-devel"
+  CIBW_BEFORE_ALL_MACOS: "brew install libtiff libjpeg openjpeg libimagequant webp little-cms2 freetype libraqm"
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, macos-12]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'python-pillow/Pillow'
+          ref: ${{ env.VERSION }}
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  build_windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["nogil-3.9"]
+        architecture: ["x64"]
+
+    name: Python ${{ matrix.python-version }} ${{ matrix.architecture }}
+
+    steps:
+    - name: Checkout Pillow
+      uses: actions/checkout@v3
+      with:
+        repository: 'python-pillow/Pillow'
+        ref: ${{ env.VERSION }}
+
+    - name: Checkout cached dependencies
+      uses: actions/checkout@v3
+      with:
+        repository: python-pillow/pillow-depends
+        path: winbuild\depends
+
+    # sets env: pythonLocation
+    - name: Set up Python
+      uses: colesbury/setup-python@nogil
+      with:
+        python-version: ${{ matrix.python-version }}
+        architecture: ${{ matrix.architecture }}
+        cache: pip
+        cache-dependency-path: ".github/workflows/test-windows.yml"
+
+    - name: Print build system information
+      run: python3 .github/workflows/system-info.py
+
+    - name: python3 -m pip install wheel pytest pytest-cov pytest-timeout defusedxml
+      run: python3 -m pip install wheel pytest pytest-cov pytest-timeout defusedxml
+
+    - name: Install dependencies
+      id: install
+      run: |
+        7z x winbuild\depends\nasm-2.15.05-win64.zip "-o$env:RUNNER_WORKSPACE\"
+        echo "$env:RUNNER_WORKSPACE\nasm-2.15.05" >> $env:GITHUB_PATH
+        winbuild\depends\gs1000w32.exe /S
+        echo "C:\Program Files (x86)\gs\gs10.0.0\bin" >> $env:GITHUB_PATH
+        xcopy /S /Y winbuild\depends\test_images\* Tests\images\
+        # make cache key depend on VS version
+        & "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" `
+          | find """catalog_buildVersion""" `
+          | ForEach-Object { $a = $_.split(" ")[1]; echo "vs=$a" >> $env:GITHUB_OUTPUT }
+      shell: pwsh
+
+    - name: Cache build
+      id: build-cache
+      uses: actions/cache@v3
+      with:
+        path: winbuild\build
+        key:
+          ${{ hashFiles('winbuild\build_prepare.py') }}-${{ hashFiles('.github\workflows\test-windows.yml') }}-${{ env.pythonLocation }}-${{ steps.install.outputs.vs }}
+
+    - name: Prepare build
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: |
+        & python.exe winbuild\build_prepare.py -v --python=$env:pythonLocation --srcdir
+      shell: pwsh
+
+    - name: Build dependencies / libjpeg-turbo
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_libjpeg.cmd"
+
+    - name: Build dependencies / zlib
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_zlib.cmd"
+
+    - name: Build dependencies / xz
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_xz.cmd"
+
+    - name: Build dependencies / WebP
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_libwebp.cmd"
+
+    - name: Build dependencies / LibTiff
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_libtiff.cmd"
+
+    # for FreeType CBDT/SBIX font support
+    - name: Build dependencies / libpng
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_libpng.cmd"
+
+    # for FreeType WOFF2 font support
+    - name: Build dependencies / brotli
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_brotli.cmd"
+
+    - name: Build dependencies / FreeType
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_freetype.cmd"
+
+    - name: Build dependencies / LCMS2
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_lcms2.cmd"
+
+    - name: Build dependencies / OpenJPEG
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_openjpeg.cmd"
+
+    # GPL licensed
+    - name: Build dependencies / libimagequant
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_libimagequant.cmd"
+
+    # Raqm dependencies
+    - name: Build dependencies / HarfBuzz
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_harfbuzz.cmd"
+
+    # Raqm dependencies
+    - name: Build dependencies / FriBidi
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: "& winbuild\\build\\build_dep_fribidi.cmd"
+
+    # trim ~150MB for each job
+    - name: Optimize build cache
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      run: rmdir /S /Q winbuild\build\src
+      shell: cmd
+
+    - name: Build Pillow
+      run: |
+        $FLAGS=""
+        if ('${{ github.event_name }}' -ne 'pull_request') { $FLAGS="--disable-imagequant" }
+        & winbuild\build\build_pillow.cmd $FLAGS install
+      shell: pwsh
+
+    # FIXME: & $env:pythonLocation\python.exe selftest.py --installed
+
+    # skip PyPy for speed
+    - name: Enable heap verification
+      if: "!contains(matrix.python-version, 'pypy')"
+      run: |
+        & reg.exe add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\python.exe" /v "GlobalFlag" /t REG_SZ /d "0x02000000" /f
+    - name: Test Pillow
+      if: false # FIXME: self tests fail (see issue #1)
+      run: |
+        path %GITHUB_WORKSPACE%\\winbuild\\build\\bin;%PATH%
+        python.exe -m pytest -vx -W always --cov PIL --cov Tests --cov-report term --cov-report xml Tests
+      shell: cmd
+
+    - name: Prepare to upload errors
+      if: failure()
+      run: |
+        mkdir -p Tests/errors
+      shell: bash
+
+    - name: Upload errors
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: errors
+        path: Tests/errors
+
+    - name: After success
+      run: |
+        .ci/after_success.sh
+      shell: pwsh
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: GHA_Windows
+        name: ${{ runner.os }} Python ${{ matrix.python-version }} ${{ matrix.architecture }}
+
+    - name: Build wheel
+      id: wheel
+      if: "github.event_name != 'pull_request'"
+      run: |
+        mkdir fribidi\${{ matrix.architecture }}
+        copy winbuild\build\bin\fribidi* fribidi\${{ matrix.architecture }}
+        setlocal EnableDelayedExpansion
+        for %%f in (winbuild\build\license\*) do (
+          set x=%%~nf
+          rem Skip FriBiDi license, it is not included in the wheel.
+          set fribidi=!x:~0,7!
+          if NOT !fribidi!==fribidi (
+            rem Skip imagequant license, it is not included in the wheel.
+            set libimagequant=!x:~0,13!
+            if NOT !libimagequant!==libimagequant (
+              echo. >> LICENSE
+              echo ===== %%~nf ===== >> LICENSE
+              echo. >> LICENSE
+              type %%f >> LICENSE
+            )
+          )
+        )
+        for /f "tokens=3 delims=/" %%a in ("${{ github.ref }}") do echo dist=dist-%%a >> %GITHUB_OUTPUT%
+        winbuild\\build\\build_pillow.cmd --disable-imagequant bdist_wheel
+      shell: cmd
+
+    - name: Upload wheel
+      uses: actions/upload-artifact@v3
+      if: "github.event_name != 'pull_request'"
+      with:
+        path: dist\*.whl
+
+    - name: Upload fribidi.dll
+      if: "github.event_name != 'pull_request' && matrix.python-version == 3.11"
+      uses: actions/upload-artifact@v3
+      with:
+        name: fribidi
+        path: fribidi\*
+
+
+  upload_wheel:
+    needs: [build_wheels, build_windows]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

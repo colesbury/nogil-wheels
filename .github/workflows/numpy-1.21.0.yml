@@ -1,0 +1,91 @@
+name: numpy (1.21.0)
+
+on: [workflow_dispatch]
+
+# This is the current oldest supported NumPy for Python 3.9 on macOS arm64
+# https://github.com/numpy/numpy/blob/v1.21.0/azure-pipelines.yml
+# https://github.com/MacPython/numpy-wheels/blob/4f96976cfc86a3c3ac17ee246cf30dd701ffb321/azure-pipelines.yml
+
+env:
+  VERSION: 1.21.0
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_MACOS: arm64
+
+  CIBW_BEFORE_BUILD_MACOS: >
+    basedir=$(python tools/openblas_support.py) &&
+    cp -r $basedir/lib/* /opt/arm64-builds/lib &&
+    cp -r $basedir/include/* /opt/arm64-builds/include
+  CIBW_ENVIRONMENT_MACOS:
+    CFLAGS='-std=c99 -fno-strict-aliasing'
+    OPENBLAS=/opt/arm64-builds
+
+  # Workaround for https://github.com/pypa/distutils/issues/15
+  # Later versions of NumPy include this in their setup.py
+  SETUPTOOLS_USE_DISTUTILS: stdlib
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-10.15]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'colesbury/numpy'
+          ref: v${{ env.VERSION }}-nogil
+          submodules: true
+          # versioneer.py requires the latest tag to be reachable. Here we
+          # fetch the complete history to get access to the tags.
+          # A shallow clone can work when the following issue is resolved:
+          # https://github.com/actions/checkout/issues/338
+          fetch-depth: 0
+
+      - name: Fix tags
+        run: git tag -f v${{ env.VERSION }}
+
+      # Adapted from https://github.com/MacPython/gfortran-install/blob/4148a01d4b0209e4a5933968a0be62f0f3b2c1ca/gfortran_utils.sh
+      - name: Install gfortran (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -L -O https://github.com/isuruf/gcc/releases/download/gcc-10-arm-20210228/gfortran-darwin-arm64.tar.gz
+          export GFORTRAN_SHA=f26990f6f08e19b2ec150b9da9d59bd0558261dd
+          if [[ "$(shasum gfortran-darwin-arm64.tar.gz)" != "${GFORTRAN_SHA}  gfortran-darwin-arm64.tar.gz" ]]; then
+              echo "shasum mismatch for gfortran-darwin-arm64"
+              exit 1
+          fi
+          sudo mkdir -p /opt/
+          sudo cp "gfortran-darwin-arm64.tar.gz" /opt/gfortran-darwin-arm64.tar.gz
+          pushd /opt
+              sudo tar -xvf gfortran-darwin-arm64.tar.gz
+              sudo rm gfortran-darwin-arm64.tar.gz
+          popd
+          export FC_ARM64="$(find /opt/gfortran-darwin-arm64/bin -name "*-gfortran")"
+          libgfortran="$(find /opt/gfortran-darwin-arm64/lib -name libgfortran.dylib)"
+          libdir=$(dirname $libgfortran)
+
+          export FC_ARM64_LDFLAGS="-L$libdir -Wl,-rpath,$libdir"
+          if [[ "${PLAT:-}" == "arm64" ]]; then
+              export FC=$FC_ARM64
+          fi
+
+      - name: Create OpenBLAS directory
+        run: |
+          sudo mkdir -p /opt/arm64-builds/lib /opt/arm64-builds/include
+          sudo chown -R $USER /opt/arm64-builds
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    with:
+      package: numpy
+    secrets: inherit

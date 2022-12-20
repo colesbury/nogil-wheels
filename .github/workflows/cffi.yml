@@ -1,0 +1,42 @@
+name: cffi
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 1.15.1
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: universal2
+  CIBW_ARCHS_WINDOWS: AMD64
+  CIBW_BEFORE_ALL_LINUX: yum install -y libffi-devel
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-12]
+
+    steps:
+      - uses: actions/setup-python@v4
+
+      - name: Download sdist
+        shell: bash
+        run: |
+          filename="cffi-$VERSION"
+          pip download --no-deps --no-binary :all: cffi==$VERSION
+          tar xf $filename.tar.gz --strip-components=1
+          rm $filename.tar.gz
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

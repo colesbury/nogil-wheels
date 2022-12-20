@@ -1,0 +1,105 @@
+name: shapely
+
+on: [workflow_dispatch]
+
+# See https://github.com/shapely/shapely/blob/main/.github/workflows/release.yml
+
+env:
+  VERSION: 2.0.0
+  CIBW_BUILD: nogil39-*
+
+jobs:
+  build_wheels:
+    name: Build ${{ matrix.arch }} wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    env:
+      GEOS_VERSION: "3.11.1"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - os: ubuntu-20.04
+          arch: x86_64
+        - os: windows-2019
+          arch: AMD64
+          msvc_arch: x64
+        - os: macos-11
+          arch: x86_64
+          cmake_osx_architectures: x86_64
+        - os: macos-11
+          arch: arm64
+          cmake_osx_architectures: arm64
+        #- os: macos-11
+        #  arch: universal2
+        #  cmake_osx_architectures: "x86_64;arm64"
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'shapely/shapely'
+          ref: ${{ env.VERSION }}
+          fetch-depth: 0
+
+      - name: Cache GEOS build
+        uses: actions/cache@v3
+        with:
+          path: ${{ runner.temp }}/geos-${{ env.GEOS_VERSION }}
+          key: ${{ matrix.os }}-${{ matrix.arch }}-${{ env.GEOS_VERSION }}-${{ hashFiles('ci/*') }}
+
+      - name: Add GEOS LICENSE
+        run: |
+          cp ci/wheelbuilder/LICENSE_GEOS .
+        shell: bash
+
+      - name: Add MSVC LICENSE
+        run: |
+          cp ci/wheelbuilder/LICENSE_win32 .
+        shell: bash
+        if: ${{ matrix.os == 'windows-2019' }}
+
+      # - name: Set up QEMU
+      #   uses: docker/setup-qemu-action@v1
+      #   with:
+      #     platforms: ${{ matrix.qemu_platform }}
+      #   if: ${{ matrix.qemu_platform }}
+
+      - name: Activate MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+        if: ${{ matrix.msvc_arch }}
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+        env:
+          CIBW_ARCHS: ${{ matrix.arch }}
+          CIBW_ENVIRONMENT_LINUX:
+            GEOS_VERSION=${{ env.GEOS_VERSION }}
+            GEOS_INSTALL=/host${{ runner.temp }}/geos-${{ env.GEOS_VERSION }}
+            GEOS_CONFIG=/host${{ runner.temp }}/geos-${{ env.GEOS_VERSION }}/bin/geos-config
+            LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/host${{ runner.temp }}/geos-${{ env.GEOS_VERSION }}/lib
+          CIBW_ENVIRONMENT_MACOS:
+            GEOS_INSTALL=${{ runner.temp }}/geos-${{ env.GEOS_VERSION }}
+            GEOS_CONFIG=${{ runner.temp }}/geos-${{ env.GEOS_VERSION }}/bin/geos-config
+            LDFLAGS=-Wl,-rpath,${{ runner.temp }}/geos-${{ env.GEOS_VERSION }}/lib
+            MACOSX_DEPLOYMENT_TARGET=10.9
+            CMAKE_OSX_ARCHITECTURES='${{ matrix.cmake_osx_architectures }}'
+          CIBW_ENVIRONMENT_WINDOWS:
+            GEOS_INSTALL='${{ runner.temp }}\geos-${{ env.GEOS_VERSION }}'
+            GEOS_LIBRARY_PATH='${{ runner.temp }}\geos-${{ env.GEOS_VERSION }}\lib'
+            GEOS_INCLUDE_PATH='${{ runner.temp }}\geos-${{ env.GEOS_VERSION }}\include'
+          CIBW_BEFORE_ALL: ./ci/install_geos.sh
+          CIBW_BEFORE_ALL_WINDOWS: ci\install_geos.cmd
+          CIBW_BEFORE_BUILD_WINDOWS: pip install delvewheel
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: delvewheel repair --add-path ${{ runner.temp }}\geos-${{ env.GEOS_VERSION }}\bin -w {dest_dir} {wheel}
+          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_COMMAND: pytest --pyargs shapely.tests
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

@@ -1,0 +1,40 @@
+name: matplotlib
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 3.6.2
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: universal2
+  CIBW_ARCHS_WINDOWS: AMD64
+  CIBW_BEFORE_BUILD: >-
+    pip install certifi oldest-supported-numpy &&
+    git clean -fxd build
+  MPL_DISABLE_FH4: "yes"
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, windows-latest, macos-11]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'matplotlib/matplotlib'
+          ref: v${{ env.VERSION }}
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

@@ -1,0 +1,46 @@
+name: numpy
+
+on: [workflow_dispatch]
+
+# See https://github.com/numpy/numpy/blob/main/.github/workflows/wheels.yml
+
+env:
+  VERSION: 1.24.0
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: x86_64 arm64
+  CIBW_ARCHS_WINDOWS: AMD64
+  CIBW_TEST_SKIP: "*"
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-12]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'colesbury/numpy'
+          ref: v${{ env.VERSION }}-nogil
+          submodules: true
+
+      - name: Fix tags
+        run: git tag -f v${{ env.VERSION }}
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+        env:
+          NPY_USE_BLAS_ILP64: 1
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

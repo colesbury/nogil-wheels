@@ -1,0 +1,35 @@
+# See https://github.com/pybind/pybind11/blob/master/.github/workflows/pip.yml
+
+name: pybind11
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 2.6.2
+
+jobs:
+  build_wheels:
+    name: Build wheels
+    runs-on: ubuntu-latest
+    container:
+      image: nogil/manylinux2014_x86_64:latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'colesbury/pybind11'
+          ref: v${{ env.VERSION }}-nogil
+
+      - name: Build wheels
+        run: |
+          export PATH=/opt/python/nogil39-nogil_39b_x86_64_linux_gnu/bin:$PATH
+          pip wheel . -w wheelhouse
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

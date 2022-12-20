@@ -1,0 +1,45 @@
+name: orjson
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 3.8.3
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: x86_64 arm64
+  CIBW_ARCHS_WINDOWS: AMD64
+  CIBW_BEFORE_ALL_LINUX: |
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  CIBW_ENVIRONMENT_LINUX: >
+    PATH=$HOME/.cargo/bin:$PATH
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-12]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'ijl/orjson'
+          ref: ${{ env.VERSION }}
+
+      - name: Add aarch64 rust target (macOS)
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

@@ -1,0 +1,39 @@
+name: pandas
+
+on: [workflow_dispatch]
+
+# See https://github.com/pandas-dev/pandas/blob/main/.github/workflows/wheels.yml
+
+env:
+  VERSION: 1.5.2
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: universal2
+  CIBW_ARCHS_WINDOWS: AMD64
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-11]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'pandas-dev/pandas'
+          ref: v${{ env.VERSION }}
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

@@ -1,0 +1,39 @@
+# The released tblib 1.7.0 isn't compatible, but the master branch is.
+# This won't be necessary once 1.8.0 is released.
+# NOTE: this is not a binary wheel
+
+name: tblib
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 1.7.1
+
+jobs:
+  build_wheel:
+    name: Build wheel
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'colesbury/python-tblib'
+          ref: v${{ env.VERSION }}
+
+      # upstream CPython is OK, this isn't a binary wheel
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Build wheels
+        run: |
+          python -m pip wheel . -w wheelhouse
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheel]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

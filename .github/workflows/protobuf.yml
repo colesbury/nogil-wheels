@@ -1,0 +1,42 @@
+# See https://github.com/protocolbuffers/protobuf
+# See https://github.com/protocolbuffers/protobuf/blob/main/kokoro/linux/python39/common.cfg
+# See https://github.com/protocolbuffers/protobuf/blob/main/kokoro/linux/python39_cpp/common.cfg
+
+name: protobuf
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 4.21.12
+  GIT_VERSION: 21.12
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: universal2
+  CIBW_ARCHS_WINDOWS: AMD64
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-12]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'protocolbuffers/protobuf'
+          ref: v${{ env.GIT_VERSION }}
+          submodules: recursive
+
+      - run: |
+          bazel build //python/... //python:python_version --define=use_fast_cpp_protos=true
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+#   upload_wheel:
+#     needs: [build_wheels]
+#     uses: ./.github/workflows/upload-wheel.yml
+#     secrets: inherit

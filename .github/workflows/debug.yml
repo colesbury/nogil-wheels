@@ -1,0 +1,25 @@
+name: debug
+
+on: [workflow_dispatch]
+
+jobs:
+  debug:
+    name: Debug on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-2019]
+
+    steps:
+      - uses: colesbury/setup-python@nogil
+        with:
+          python-version: nogil-3.9
+
+      - run: |
+          pip download --no-deps http://pypi.sam-gross.com/numpy-1.19.3-nogil39-none-win_amd64.whl
+
+      - name: Debug via SSH
+        uses: luchihoratiu/debug-via-ssh@v1.1
+        with:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+          SSH_PASS: ${{ secrets.SSH_PASS }}

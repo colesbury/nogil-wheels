@@ -1,0 +1,52 @@
+# See https://github.com/zeromq/pyzmq/blob/main/.github/workflows/wheels.yml
+
+name: pyzmq
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 24.0.1
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: universal2
+  CIBW_ARCHS_WINDOWS: AMD64
+
+  # This workflow is structured a bit differently than upstream
+  CIBW_BEFORE_BUILD: pip install packaging cython && python setup.py cython
+  CIBW_BEFORE_BUILD_WINDOWS: pip install packaging cython delvewheel==0.0.22 && python setup.py cython
+
+  # Need to explicitly exclude vcruntime140.dll because delvewheel doesn't know about nogil
+  CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: >
+      delvewheel repair
+      -v
+      --no-dll=vcruntime140.dll
+      --add-path=C:/libzmq-dll
+      --wheel-dir={dest_dir}
+      {wheel}
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-12]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'zeromq/pyzmq'
+          ref: v${{ env.VERSION }}
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

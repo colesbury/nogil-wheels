@@ -1,0 +1,300 @@
+# From https://github.com/yaml/pyyaml/blob/master/.github/workflows/manual_artifact_build.yaml
+# Adapted for nogil Python
+# See license: LICENSE.pyyaml.txt
+
+name: PyYAML
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: "6.0"
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: universal2
+  CIBW_ARCHS_WINDOWS: AMD64
+
+  LIBYAML_REPO: https://github.com/yaml/libyaml
+  LIBYAML_REF: 0.2.5
+
+jobs:
+  linux_libyaml:
+    name: libyaml ${{matrix.cfg.arch}} ${{matrix.cfg.platform}}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cfg:
+        - { platform: manylinux2014, arch: x86_64 }
+    env:
+      DOCKER_IMAGE: nogil/${{matrix.cfg.platform}}_${{matrix.cfg.arch}}
+    steps:
+    - name: Check cached libyaml state
+      id: cached_libyaml
+      uses: actions/cache@v2
+      with:
+        path: libyaml
+        key: libyaml_${{matrix.cfg.platform}}_${{matrix.cfg.arch}}_${{env.LIBYAML_REF}}
+
+    - name: configure docker foreign arch support
+      uses: docker/setup-qemu-action@v1
+      if: matrix.cfg.arch != 'x86_64' && steps.cached_libyaml.outputs.cache-hit != 'true'
+
+    - name: Checkout pyyaml
+      uses: actions/checkout@v3
+      if: steps.cached_libyaml.outputs.cache-hit != 'true'
+      with:
+        repository: 'yaml/pyyaml'
+        ref: ${{ env.VERSION }}
+
+    - name: Build libyaml
+      run: >
+        docker run --rm
+        --volume "$(pwd):/io"
+        --env LIBYAML_REF
+        --env LIBYAML_REPO
+        --workdir /io
+        "$DOCKER_IMAGE"
+        /io/packaging/build/libyaml.sh
+      if: steps.cached_libyaml.outputs.cache-hit != 'true'
+
+    - name: ensure output is world readable (or cache fill fails with Permission Denied)
+      run: >
+        sudo chmod -R a+r ./libyaml/
+      if: steps.cached_libyaml.outputs.cache-hit != 'true'
+
+
+  linux_pyyaml:
+    needs: linux_libyaml
+    name: pyyaml ${{matrix.arch}} ${{matrix.platform}} ${{matrix.spec}}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+        - { platform: manylinux2014, arch: x86_64, spec: nogil39 }
+
+    steps:
+    - name: Checkout PyYAML
+      uses: actions/checkout@v2
+      with:
+        repository: 'yaml/pyyaml'
+        ref: ${{ env.VERSION }}
+
+    - name: Fetch cached libyaml
+      id: cached_libyaml
+      uses: actions/cache@v2
+      with:
+        path: libyaml
+        key: libyaml_${{matrix.platform}}_${{matrix.arch}}_${{env.LIBYAML_REF}}
+
+    - name: Ensure libyaml fetched
+      run: exit 1
+      if: steps.cached_libyaml.outputs.cache-hit != 'true'
+
+    - name: configure docker foreign arch support
+      uses: docker/setup-qemu-action@v1
+      if: matrix.arch != 'x86_64'
+
+    - name: Build/Test/Package
+      uses: colesbury/cibuildwheel@nogil
+      env:
+        CIBW_ARCHS: all
+        CIBW_BUILD: ${{matrix.spec}}-manylinux_${{matrix.arch}}
+        CIBW_BUILD_VERBOSITY: 1
+        # containerized Linux builds require explicit CIBW_ENVIRONMENT
+        CIBW_ENVIRONMENT: >
+          C_INCLUDE_PATH=libyaml/include
+          LIBRARY_PATH=libyaml/src/.libs
+          LD_LIBRARY_PATH=libyaml/src/.libs
+          PYYAML_FORCE_CYTHON=1
+          PYYAML_FORCE_LIBYAML=1
+        CIBW_TEST_COMMAND: cd {project}; python tests/lib/test_all.py
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        path: ./wheelhouse/*.whl
+        if-no-files-found: error
+
+  macos_libyaml:
+    name: libyaml macos universal2
+    runs-on: macos-12
+    steps:
+    - name: Check cached libyaml state
+      id: cached_libyaml
+      uses: actions/cache@v2
+      with:
+        path: libyaml
+        key: libyaml_macos_universal2_${{env.LIBYAML_REF}}
+
+    - name: Checkout PyYAML
+      uses: actions/checkout@v2
+      if: steps.cached_libyaml.outputs.cache-hit != 'true'
+      with:
+        repository: 'yaml/pyyaml'
+        ref: ${{ env.VERSION }}
+
+    - name: Build libyaml
+      env:
+        MACOSX_DEPLOYMENT_TARGET: "11.0"
+        #SDKROOT: "11.3"
+      run: |
+        set -eux
+        brew install automake coreutils m4
+        export ARCHFLAGS="-arch x86_64 -arch arm64"
+        export CFLAGS="-arch x86_64 -arch arm64"
+        bash ./packaging/build/libyaml.sh
+        echo "finished artifact arch is $(lipo -archs libyaml/src/.libs/libyaml.a)"
+      if: steps.cached_libyaml.outputs.cache-hit != 'true'
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        path: libyaml/src/.libs/
+        if-no-files-found: error
+
+  macos_pyyaml:
+    needs: macos_libyaml
+    runs-on: macos-12
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        repository: 'yaml/pyyaml'
+        ref: ${{ env.VERSION }}
+
+    - name: Get cached libyaml state
+      id: cached_libyaml
+      uses: actions/cache@v2
+      with:
+        path: libyaml
+        key: libyaml_macos_universal2_${{env.LIBYAML_REF}}
+
+    - name: Ensure libyaml fetched
+      run: exit 1
+      if: steps.cached_libyaml.outputs.cache-hit != 'true'
+
+    - name: Build/Test/Package
+      uses: colesbury/cibuildwheel@nogil
+      env:
+        C_INCLUDE_PATH: libyaml/include
+        CIBW_BUILD_VERBOSITY: 1
+        CIBW_TEST_COMMAND: cd {project}; python tests/lib/test_all.py
+        LIBRARY_PATH: libyaml/src/.libs
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        path: wheelhouse/*.whl
+        if-no-files-found: error
+
+  windows_libyaml:
+    name: libyaml ${{matrix.platform}} ${{matrix.arch}}
+    runs-on: ${{matrix.platform}}
+    strategy:
+      matrix:
+        include:
+        - platform: windows-2019
+          arch: x64
+    steps:
+    - name: Get cached libyaml state
+      id: cached_libyaml
+      uses: actions/cache@v2
+      with:
+        path: libyaml
+        key: libyaml_${{matrix.platform}}_${{matrix.arch}}_${{env.LIBYAML_REF}}
+
+    - name: Build libyaml
+      shell: bash
+      if: steps.cached_libyaml.outputs.cache-hit != 'true'
+      run: |
+        # git spews all over stderr unless we tell it not to
+        export GIT_REDIRECT_STDERR="2>&1"
+
+        if [[ ! -d ./libyaml ]]; then
+          git clone -b ${{ env.LIBYAML_REF }} ${{ env.LIBYAML_REPO }} 2>&1
+        fi
+
+        pushd libyaml
+        git clean -fdx
+        popd
+
+        mkdir libyaml/build
+
+        pushd libyaml/build
+        cmake.exe -G "Visual Studio 16 2019" -A ${{ matrix.arch }} -DYAML_STATIC_LIB_NAME=yaml ..
+        cmake.exe --build . --config Release
+        popd
+
+
+  windows_pyyaml:
+    needs: windows_libyaml
+    name: pyyaml ${{ matrix.platform }} ${{matrix.python_arch}}
+    runs-on: ${{matrix.platform}}
+    strategy:
+      matrix:
+        include:
+        - platform: windows-2019
+          build_arch: x64
+          python_arch: x64
+          spec: nogil-3.9
+    steps:
+    # autocrlf screws up tests under Windows
+    - name: Set git to use LF
+      run: |
+        git config --global core.autocrlf false
+        git config --global core.eol lf
+
+    - name: Checkout pyyaml
+      uses: actions/checkout@v2
+      with:
+        repository: 'yaml/pyyaml'
+        ref: ${{ env.VERSION }}
+
+    - name: Get cached libyaml state
+      id: cached_libyaml
+      uses: actions/cache@v2
+      with:
+        path: libyaml
+        key: libyaml_${{matrix.platform}}_${{matrix.build_arch}}_${{env.LIBYAML_REF}}
+
+    - name: Ensure libyaml fetched
+      run: exit 1
+      if: steps.cached_libyaml.outputs.cache-hit != 'true'
+
+    - name: Install python ${{ matrix.spec }}
+      uses: colesbury/setup-python@nogil
+      with:
+        architecture: ${{ matrix.python_arch }}
+        python-version: ${{ matrix.spec }}
+
+    - name: Build/Test/Package
+      env:
+        PYYAML_FORCE_CYTHON: 1
+        PYYAML_FORCE_LIBYAML: 1
+      shell: bash
+      run: |
+        set -eux
+        python -V
+        python -m pip install Cython wheel
+
+        python setup.py \
+        --with-libyaml build_ext \
+        -I libyaml/include \
+        -L libyaml/build/Release \
+        -D YAML_DECLARE_STATIC \
+        build bdist_wheel
+
+        # run tests on built wheel
+        python -m pip install dist/*.whl
+        python tests/lib/test_all.py
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        path: dist/*.whl
+        if-no-files-found: error
+
+  upload_wheel:
+    needs: [linux_pyyaml, macos_pyyaml, windows_pyyaml]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

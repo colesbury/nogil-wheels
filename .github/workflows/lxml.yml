@@ -1,0 +1,57 @@
+# See https://github.com/lxml/lxml/blob/master/.github/workflows/wheels.yml
+
+name: lxml
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 4.9.2
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: x86_64 arm64
+  CIBW_ARCHS_WINDOWS: AMD64
+  CIBW_BEFORE_BUILD: python -m pip install setuptools wheel -r requirements.txt
+  CIBW_ENVIRONMENT: >
+    LIBXML2_VERSION=2.9.14
+    LIBXSLT_VERSION=1.1.35
+    STATIC_DEPS=true
+    MACOSX_DEPLOYMENT_TARGET=10.15
+  CIBW_ENVIRONMENT_LINUX: >
+    LIBXML2_VERSION=2.9.14
+    LIBXSLT_VERSION=1.1.35
+    STATIC_DEPS=true
+    CFLAGS=-O3 -g1 -pipe -fPIC -flto
+    LDFLAGS=-fPIC -flto
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-12]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'lxml/lxml'
+          ref: lxml-${{ env.VERSION }}
+
+      - name: Install MacOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install automake libtool
+          ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit

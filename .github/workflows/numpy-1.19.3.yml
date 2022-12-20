@@ -1,0 +1,106 @@
+name: numpy (1.19.3)
+
+on: [workflow_dispatch]
+
+# This is the current oldest supported NumPy for Python 3.9 except for ARM64 builds see
+# https://github.com/numpy/numpy/blob/v1.19.3/azure-pipelines.yml and
+# https://github.com/numpy/numpy/blob/v1.19.3/azure-steps-windows.yml
+
+env:
+  VERSION: 1.19.3
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: x86_64
+  CIBW_ARCHS_WINDOWS: AMD64
+
+  NPY_USE_BLAS_ILP64: 1
+  CIBW_BEFORE_BUILD_LINUX: >
+    basedir=$(python tools/openblas_support.py) &&
+    cp -r $basedir/lib/* /usr/local/lib &&
+    cp $basedir/include/* /usr/local/include
+  CIBW_ENVIRONMENT_LINUX:
+    CFLAGS='-std=c99 -fno-strict-aliasing'
+    LDFLAGS='-Wl,--strip-debug'
+    OPENBLAS64_=/usr/local
+
+  CIBW_BEFORE_BUILD_MACOS: >
+    basedir=$(python tools/openblas_support.py) &&
+    cp -r $basedir/lib/* /usr/local/lib &&
+    cp $basedir/include/* /usr/local/include
+  CIBW_ENVIRONMENT_MACOS:
+    CFLAGS='-std=c99 -fno-strict-aliasing'
+    OPENBLAS64_=/usr/local
+
+  CIBW_BEFORE_BUILD_WINDOWS: bash setup-openblas-windows.sh
+  CIBW_ENVIRONMENT_WINDOWS:
+    OPENBLAS64_='${{ github.workspace }}\openblas'
+    NPY_USE_BLAS_ILP64=1
+
+  # Workaround for https://github.com/pypa/distutils/issues/15
+  # Later versions of NumPy include this in their setup.py
+  SETUPTOOLS_USE_DISTUTILS: stdlib
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-10.15]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'colesbury/numpy'
+          ref: v${{ env.VERSION }}-nogil
+          submodules: true
+          # versioneer.py requires the latest tag to be reachable. Here we
+          # fetch the complete history to get access to the tags.
+          # A shallow clone can work when the following issue is resolved:
+          # https://github.com/actions/checkout/issues/338
+          fetch-depth: 0
+
+      - name: Fix tags
+        run: git tag -f v${{ env.VERSION }}
+
+      - name: Install gfortran (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -L https://github.com/MacPython/gfortran-install/raw/master/archives/gfortran-4.9.0-Mavericks.dmg -o gfortran.dmg
+          GFORTRAN_SHA256=$(shasum -a 256 gfortran.dmg)
+          KNOWN_SHA256="d2d5ca5ba8332d63bbe23a07201c4a0a5d7e09ee56f0298a96775f928c3c4b30  gfortran.dmg"
+          if [ "$GFORTRAN_SHA256" != "$KNOWN_SHA256" ]; then
+              echo sha256 mismatch
+              exit 1
+          fi
+          hdiutil attach -mountpoint /Volumes/gfortran gfortran.dmg
+          sudo installer -pkg /Volumes/gfortran/gfortran.pkg -target /
+          otool -L /usr/local/gfortran/lib/libgfortran.3.dylib
+
+      - name: Write OpenBLAS install script (Windows)
+        uses: DamianReeves/write-file-action@v1.2
+        if: runner.os == 'Windows'
+        with:
+          path: setup-openblas-windows.sh
+          contents: |
+            echo OPENBLAS64_=$OPENBLAS64_
+            target=$(python tools/openblas_support.py)
+            mkdir openblas
+            echo "Copying $target to openblas/openblas64_.a"
+            cp $target openblas/openblas64_.a
+            python -c "from tools import openblas_support; openblas_support.make_init('numpy')"
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    with:
+      package: numpy
+    secrets: inherit

@@ -1,0 +1,53 @@
+# See https://github.com/explosion/cython-blis/blob/master/azure-pipelines.yml
+
+name: blis
+
+on: [workflow_dispatch]
+
+env:
+  VERSION: 0.9.1
+  CIBW_BUILD: nogil39-*
+  CIBW_ARCHS_LINUX: auto
+  CIBW_ARCHS_MACOS: x86_64 arm64
+  CIBW_ARCHS_WINDOWS: AMD64
+  CIBW_BUILD_VERBOSITY: 2
+  CIBW_BEFORE_BUILD: |
+    pip install -r requirements.txt
+  CIBW_ENVIRONMENT_WINDOWS: >
+    PATH="C:\Program Files\LLVM\bin;$PATH"
+    AR="llvm-ar"
+    AS="llvm-as"
+    CC="clang"
+    RANLIB=echo
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-12]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'explosion/cython-blis'
+          ref: v${{ env.VERSION }}
+          submodules: recursive
+
+      - name: Preinstall (Windows)
+        if: runner.os == 'Windows'
+        run: choco install llvm
+
+      - name: Build wheels
+        uses: colesbury/cibuildwheel@nogil
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit
