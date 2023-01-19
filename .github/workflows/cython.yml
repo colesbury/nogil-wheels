@@ -5,7 +5,7 @@ on: [workflow_dispatch]
 # See https://github.com/cython/cython/blob/master/.github/workflows/wheels.yml
 
 env:
-  VERSION: 0.29.32
+  VERSION: 0.29.33
   CIBW_BUILD: nogil39-*
   CIBW_ARCHS_LINUX: auto
   CIBW_ARCHS_MACOS: universal2
