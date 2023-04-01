@@ -1,5 +1,6 @@
 # See the following build scripts:
 # https://github.com/python-pillow/Pillow/blob/main/.github/workflows/test-windows.yml
+# https://github.com/python-pillow/pillow-wheels/blob/main/.github/workflows/wheels-macos.yml
 # https://github.com/python-pillow/pillow-wheels/blob/main/config.sh
 
 name: Pillow
@@ -7,20 +8,20 @@ name: Pillow
 on: [workflow_dispatch]
 
 env:
-  VERSION: 9.3.0
+  VERSION: 9.5.0
+  BUILD_COMMIT: 9.5.0
+  REPO_DIR: Pillow
+  TEST_DEPENDS: "pytest pytest-timeout"
   CIBW_BUILD: nogil39-*
-  CIBW_ARCHS_LINUX: auto
-  CIBW_ARCHS_MACOS: x86_64
   CIBW_BEFORE_ALL_LINUX: "yum install -y zlib libjpeg-devel libtiff-devel freetype-devel lcms2-devel libwebp-devel harfbuzz-devel ghostscript libffi-devel ImageMagick fribidi-devel"
-  CIBW_BEFORE_ALL_MACOS: "brew install libtiff libjpeg openjpeg libimagequant webp little-cms2 freetype libraqm"
 
 jobs:
-  build_wheels:
+  build_linux:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-20.04, macos-12]
+        os: [ubuntu-20.04]
 
     steps:
       - uses: actions/checkout@v3
@@ -34,6 +35,42 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           path: ./wheelhouse/*.whl
+
+  build_macos:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-12]
+        python: [nogil-3.9.10]
+        platform: [ "x86_64", "arm64" ]
+    env:
+      PLAT: ${{ matrix.platform }}
+      MB_PYTHON_VERSION: ${{ matrix.python }}
+      TRAVIS_OS_NAME: "osx"
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'python-pillow/pillow-wheels'
+          ref: ${{ env.VERSION }}
+          submodules: true
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+
+      - name: Patch multibuild
+        run: |
+          rm -rf multibuild
+          git clone https://github.com/colesbury/multibuild -b nogil
+
+      - name: Build Wheel
+        run: .github/workflows/build.sh
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: wheelhouse/*.whl
 
   build_windows:
     runs-on: windows-latest
@@ -252,6 +289,6 @@ jobs:
 
 
   upload_wheel:
-    needs: [build_wheels, build_windows]
+    needs: [build_linux, build_macos, build_windows]
     uses: ./.github/workflows/upload-wheel.yml
     secrets: inherit
