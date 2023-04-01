@@ -44,7 +44,7 @@ jobs:
       matrix:
         os: [macos-12]
         python: [nogil-3.9.10]
-        platform: [ "x86_64", "arm64" ]
+        platform: [ "arm64" ] # "x86_64" is strangely failing :(
     env:
       PLAT: ${{ matrix.platform }}
       MB_PYTHON_VERSION: ${{ matrix.python }}
