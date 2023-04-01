@@ -1,0 +1,55 @@
+# See the following build scripts:
+# https://github.com/python-pillow/Pillow/blob/main/.github/workflows/test-windows.yml
+# https://github.com/python-pillow/pillow-wheels/blob/main/.github/workflows/wheels-macos.yml
+# https://github.com/python-pillow/pillow-wheels/blob/main/config.sh
+
+name: Pillow2
+
+on: [workflow_dispatch]
+
+env:
+  REPO_DIR: Pillow
+  TEST_DEPENDS: "pytest pytest-timeout"
+  VERSION: 9.5.0
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-12]
+        python: [
+          "nogil-3.9.10",
+        ]
+        platform: [ "x86_64", "arm64" ]
+    env:
+      BUILD_COMMIT: ${{ env.VERSION }}
+      PLAT: ${{ matrix.platform }}
+      MB_PYTHON_VERSION: ${{ matrix.python }}
+      TRAVIS_OS_NAME: "osx"
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: 'python-pillow/pillow-wheels'
+          ref: ${{ env.VERSION }}
+          submodules: true
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+      - name: Patch multibuild
+        shell: |
+          rm -rf multibuild
+          git clone https://github.com/colesbury/multibuild
+      - name: Build Wheel
+        run: .github/workflows/build.sh
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ inputs.artifacts-name }}
+          path: wheelhouse/*.whl
+
+  upload_wheel:
+    needs: [build_wheels]
+    uses: ./.github/workflows/upload-wheel.yml
+    secrets: inherit
