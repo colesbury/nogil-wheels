@@ -11,6 +11,7 @@ env:
   REPO_DIR: Pillow
   TEST_DEPENDS: "pytest pytest-timeout"
   VERSION: 9.5.0
+  BUILD_COMMIT: 9.5.0
 
 jobs:
   build_wheels:
@@ -24,7 +25,6 @@ jobs:
         ]
         platform: [ "x86_64", "arm64" ]
     env:
-      BUILD_COMMIT: ${{ env.VERSION }}
       PLAT: ${{ matrix.platform }}
       MB_PYTHON_VERSION: ${{ matrix.python }}
       TRAVIS_OS_NAME: "osx"
