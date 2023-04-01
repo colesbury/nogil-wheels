@@ -39,7 +39,7 @@ jobs:
         with:
           python-version: "3.x"
       - name: Patch multibuild
-        shell: |
+        run: |
           rm -rf multibuild
           git clone https://github.com/colesbury/multibuild
       - name: Build Wheel
