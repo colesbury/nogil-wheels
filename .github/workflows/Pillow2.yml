@@ -41,7 +41,7 @@ jobs:
       - name: Patch multibuild
         run: |
           rm -rf multibuild
-          git clone https://github.com/colesbury/multibuild
+          git clone https://github.com/colesbury/multibuild -b nogil
       - name: Build Wheel
         run: .github/workflows/build.sh
       - uses: actions/upload-artifact@v3
