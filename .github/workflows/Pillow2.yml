@@ -46,7 +46,6 @@ jobs:
         run: .github/workflows/build.sh
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ inputs.artifacts-name }}
           path: wheelhouse/*.whl
 
   upload_wheel:
