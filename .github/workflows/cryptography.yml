@@ -18,7 +18,7 @@ env:
     tar xvf openssl-${OPENSSL_VERSION}.tar.gz
     cd openssl-${OPENSSL_VERSION}
     ./config no-shared no-ssl2 no-ssl3 -fPIC --prefix=/openssl
-    make -j && make make install_sw install_ssldirs
+    make -j && make install
   CIBW_ENVIRONMENT_LINUX: >
     PATH=$HOME/.cargo/bin:$PATH
     CFLAGS="-I/openssl/include"
