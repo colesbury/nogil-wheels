@@ -13,7 +13,7 @@ env:
   CIBW_BEFORE_BUILD: pip install wheel cffi setuptools-rust
   CIBW_BEFORE_ALL_LINUX: |
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    OPENSSL_VERSION="1.1.1k"
+    OPENSSL_VERSION="1.1.1t"
     curl -O https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz
     tar xvf openssl-${OPENSSL_VERSION}.tar.gz
     cd openssl-${OPENSSL_VERSION}
@@ -23,6 +23,7 @@ env:
     PATH=$HOME/.cargo/bin:$PATH
     CFLAGS="-I/openssl/include"
     LDFLAGS="-L/openssl/lib"
+    OPENSSL_DIR="/openssl"
   CIBW_BEFORE_ALL_WINDOWS: |
     python -m pip install requests
     python .github/workflows/download_openssl.py windows openssl-win64
@@ -39,7 +40,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest]
+        # os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@v3
