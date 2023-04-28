@@ -48,7 +48,7 @@ jobs:
           ref: ${{ env.VERSION }}-nogil
 
       - uses: dtolnay/rust-toolchain@e645b0cf01249a964ec099494d38d2da0f0b349f
-        if: runner.os == "Windows"
+        if: runner.os == 'Windows'
         with:
           toolchain: stable
           target: x86_64-pc-windows-msvc
