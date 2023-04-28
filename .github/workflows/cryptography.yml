@@ -19,7 +19,7 @@ env:
     cd openssl-${OPENSSL_VERSION}
     ./config no-shared no-ssl2 no-ssl3 -fPIC --prefix=/openssl
     make -j && make make install_sw install_ssldirs
-CIBW_ENVIRONMENT_LINUX: >
+  CIBW_ENVIRONMENT_LINUX: >
     PATH=$HOME/.cargo/bin:$PATH
     CFLAGS="-I/openssl/include"
     LDFLAGS="-L/openssl/lib"
