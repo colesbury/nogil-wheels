@@ -21,9 +21,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          repository: 'jimkring/python-zstandard-nogil'
+          repository: 'colesbury/python-zstandard'
           # repository: 'indygreg/python-zstandard'
-          ref: ${{ env.VERSION }}
+          ref: ${{ env.VERSION }}-nogil
+
+      - name: Fix tags
+        run: git tag -f v${{ env.VERSION }}
 
       - name: Build wheels
         uses: colesbury/cibuildwheel@nogil
