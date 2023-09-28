@@ -10,6 +10,8 @@ env:
   CIBW_ARCHS_LINUX: auto
   CIBW_ARCHS_MACOS: universal2
   CIBW_ARCHS_WINDOWS: AMD64
+  # Tests requires Python 3.10
+  CIBW_TEST_SKIP: "*"
 
 jobs:
   build_wheels:
