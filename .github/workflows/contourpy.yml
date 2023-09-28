@@ -1,6 +1,6 @@
 # See https://github.com/contourpy/contourpy/blob/main/.github/workflows/build_wheels.yml
 
-name: ContourPy
+name: contourpy
 
 on: [workflow_dispatch]
 
