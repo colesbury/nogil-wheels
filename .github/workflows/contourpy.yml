@@ -25,6 +25,12 @@ jobs:
           repository: 'contourpy/contourpy'
           ref: v${{ env.VERSION }}
 
+      - name: Set up QEMU
+        if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: all
+
       - name: Build wheels
         uses: colesbury/cibuildwheel@nogil
 
