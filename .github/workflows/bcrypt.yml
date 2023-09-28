@@ -7,6 +7,7 @@ on: [workflow_dispatch]
 env:
   VERSION: 4.0.1
   CIBW_BUILD: nogil39-*
+  CIBW_BEFORE_BUILD: pip install wheel setuptools-rust
   CIBW_ARCHS_LINUX: auto
   CIBW_ARCHS_MACOS: universal2
   CIBW_ARCHS_WINDOWS: AMD64
