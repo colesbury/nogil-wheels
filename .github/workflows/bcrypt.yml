@@ -11,7 +11,7 @@ env:
   CIBW_BEFORE_ALL_LINUX: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
   CIBW_ENVIRONMENT_LINUX: 'PATH="$PATH:$HOME/.cargo/bin"'
   CIBW_ARCHS_LINUX: auto
-  CIBW_ARCHS_MACOS: universal2
+  CIBW_ARCHS_MACOS: x86_64 arm64
   CIBW_ARCHS_WINDOWS: AMD64
 
 jobs:
