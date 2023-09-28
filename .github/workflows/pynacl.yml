@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          repository: 'pyca/bcrypt'
+          repository: 'pyca/pynacl'
           ref: ${{ env.VERSION }}
 
       - name: Build wheels
