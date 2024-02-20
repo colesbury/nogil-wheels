@@ -39,4 +39,6 @@ jobs:
   upload_wheel:
     needs: [build_wheels]
     uses: ./.github/workflows/upload-wheel.yml
+    with:
+      package: Cython
     secrets: inherit
