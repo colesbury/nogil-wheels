@@ -28,7 +28,7 @@ jobs:
           ref: ${{ env.VERSION }}-nogil
 
       - name: Fix tags
-        run: git tag -f v${{ env.VERSION }}
+        run: git tag -f ${{ env.VERSION }}
 
       - name: Build wheels
         uses: colesbury/cibuildwheel@nogil
