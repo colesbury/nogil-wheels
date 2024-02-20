@@ -1,4 +1,4 @@
-name: Cython
+name: Cython 0.29.x
 
 on: [workflow_dispatch]
 
