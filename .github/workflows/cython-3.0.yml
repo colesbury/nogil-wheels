@@ -18,13 +18,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-20.04, windows-2019, macos-12]
+        # os: [ubuntu-20.04, windows-2019, macos-12]
+        os: [ubuntu-20.04, macos-12]
 
     steps:
       - uses: actions/checkout@v3
         with:
           repository: 'colesbury/cython'
           ref: ${{ env.VERSION }}-nogil
+
+      - name: Fix tags
+        run: git tag -f v${{ env.VERSION }}
 
       - name: Build wheels
         uses: colesbury/cibuildwheel@nogil
